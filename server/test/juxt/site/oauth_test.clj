@@ -19,6 +19,7 @@
    ["juxt/site/bootstrap"
     ["juxt/site/keypair" {"kid" "test-kid"}]
     "juxt/site/sessions"
+    "juxt/site/login-form"
     ["juxt/site/oauth-authorization-endpoint"
      {"session-scope" "https://auth.example.test/session-scopes/form-login-session"
       "authorization-code-length" 12
@@ -80,7 +81,9 @@
          :juxt.site/type "https://meta.juxt.site/types/application"
          :juxt.site/client-id "test-app"
          :juxt.site/client-type "public"
-         :juxt.site/redirect-uris ["https://test-app.example.test/callback"]}
+         :juxt.site/redirect-uris ["https://test-app.example.test/callback"]
+         :juxt.site/authorization-server "https://auth.example.test"
+         :juxt.site/resource-server "https://data.example.test"}
         (xt/entity (xt/db *xt-node*) "https://auth.example.test/applications/test-app")))
 
       (perform-operation!

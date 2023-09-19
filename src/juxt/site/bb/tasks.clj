@@ -85,10 +85,28 @@
                          "cache-client-secret" true}
    "curl" {"save-access-token-to-default-config-file" true}})
 
+(defn configure
+  "Create a static edn configuration file"
+  [{:keys [auth-base-uri data-base-uri]}]
+  (let [dir (some identity
+             [(io/file (System/getenv "XDG_CONFIG_HOME"))
+              (io/file (System/getenv "HOME") ".config/site")])
+        config-file (io/file dir "site-cli.edn")]
+    (when (.exists config-file)
+      (throw (ex-info "Config file already exists" {:file config-file})))
+    (spit
+     config-file
+     (with-out-str
+       (pprint
+        (cond-> (default-config)
+          auth-base-uri (assoc-in ["uri-map" "https://auth.example.org"] auth-base-uri)
+          data-base-uri (assoc-in ["uri-map" "https://data.example.org"] data-base-uri)
+          ))))))
+
 (defn profile [opts]
   (or
-   (get opts :profile)
-   (keyword (System/getenv "SITE_PROFILE"))
+   (some-> (get opts :profile) name)
+   (System/getenv "SITE_PROFILE")
    :default))
 
 (defn profile-task []
@@ -152,7 +170,7 @@
                     (http/get
                      (cond-> (str admin-base-uri "/resources")
                        pattern (str "?pattern=" (url-encode pattern)))
-                     {"accept" "application/json"})))]
+                     {:headers {:accept "application/json"}})))]
         (println res)))))
 
 (defn find []
@@ -167,7 +185,7 @@
               (http/get
                (cond-> (str admin-base-uri "/resources")
                  pattern (str "?pattern=" (url-encode pattern)))
-               {"accept" "application/json"})))
+               {:headers {:accept "application/json"}})))
 
             resource (cond
                        (= (count resources) 0)
@@ -351,7 +369,7 @@
             {:keys [status body]}
             (http/post
              token-endpoint
-             {:headers {"content-type" "application/x-www-form-urlencoded"}
+             {:headers {:content-type "application/x-www-form-urlencoded"}
               :body (format "grant_type=%s&username=%s&password=%s&client_id=%s"
                             "password" username password client-id)
               :throw false})]
@@ -395,7 +413,7 @@
           {introspection-status :status introspection-body :body}
           (http/post
            introspection-uri
-           {:headers {"authorization" (format "Bearer %s" token)}
+           {:headers {:authorization (format "Bearer %s" token)}
             :form-params {"token" token}
             :throw false})
 
@@ -439,15 +457,18 @@
   (let [opts (parse-opts)
         cfg (config opts)
         data-base-uri (get-in cfg ["uri-map" "https://data.example.org"])
-        endpoint (cond-> (str data-base-uri path)
-                   (get opts :edn) (str ".edn")
-                   (get opts :txt) (str ".txt")
-                   (get opts :csv) (str ".csv"))
+        endpoint (str data-base-uri path)
+        headers {:content-type "application/json"
+                 :authorization (authorization cfg)
+                 :accept (cond
+                           (get opts :edn) "application/edn"
+                           (get opts :txt) "text/plain"
+                           (get opts :csv) "text/csv"
+                           :else "application/json")}
         {:keys [status body]}
         (http/get
          endpoint
-         {:headers {"content-type" "application/json"
-                    "authorization" (authorization cfg)}
+         {:headers headers
           :throw false})]
     (case status
       200 (print body)
@@ -466,10 +487,11 @@
             ;; TODO: There is a problem with babashka.http-client's
             ;; handling of the accept header :(
             ;; As a workaround, we go direct to the EDN representation.
-            endpoint (str data-base-uri (str path ".edn"))
+            endpoint (str data-base-uri path)
             {:keys [status body]} (http/get
                                    endpoint
-                                   {:headers {"authorization" (authorization cfg)}
+                                   {:headers {:authorization (authorization cfg)
+                                              :accept "application/edn"}
                                     :throw false})]
         (case status
           200 (let [edn (clojure.edn/read-string body)
@@ -555,7 +577,8 @@
     (if bundle
       (pprint
        (->> (installers-seq cfg bundle opts)
-            (map :juxt.site/init-data)))
+            ;; (map :juxt.site/init-data)
+            ))
       (stderr (println (format "Bundle not found: %s" bundle-name))))))
 
 (defn random-string [size]
@@ -576,7 +599,7 @@
          (:body
           (http/get
            (str admin-base-uri "/applications/" client-id)
-           {"accept" "application/json"})))]
+           {:headers {:accept "application/json"}})))]
     (get client-details "juxt.site/client-secret")))
 
 (defn print-or-save-client-secret [{:keys [client-id save] :as opts}]
@@ -636,8 +659,8 @@
   (let [{:keys [status body]}
         (http/post
          resources-uri
-         {:headers (cond-> {"content-type" "application/edn"}
-                     access-token (assoc "authorization" (format "Bearer %s" access-token)))
+         {:headers (cond-> {:content-type "application/edn"}
+                     access-token (assoc :authorization (format "Bearer %s" access-token)))
           :body (pr-str installers-seq)
           :throw false})]
     (case status
@@ -659,7 +682,8 @@
            (format "Installing: %s" title)
            (format "Installing: %s with %s" title param-str)))
         (install opts (->> installers-seq
-                           (map :juxt.site/init-data)))))))
+                           ;; (map :juxt.site/init-data)
+                           ))))))
 
 (defn install-bundle-task [{bundle-names :bundle _ :debug :as opts}]
   (let [cfg (config opts)
@@ -744,17 +768,19 @@
            ;; Install a keypair to sign JWT bearer tokens
            ["juxt/site/keypair" {"kid" (random-string 16)}]
            ;; Install the required APIs
+           ["juxt/site/user-model" {}]
            ["juxt/site/api-operations" {}]
+           ["juxt/site/protection-spaces" {}]
            ["juxt/site/resources-api" {}]
            ["juxt/site/events-api" {}]
            ["juxt/site/logs-api" {}]
            ["juxt/site/whoami-api" {}]
            ["juxt/site/users-api" {}]
            ["juxt/site/endpoints-api" {}]
+           ["juxt/site/applications-api" {}]
            ["juxt/site/openapis-api" {}]
 
            ["juxt/site/sessions" {}]
-           ["juxt/site/protection-spaces" {}]
            ["juxt/site/roles" {}]
 
            ;; RFC 7662 token introspection
@@ -796,9 +822,9 @@
         {:keys [status body]}
         (http/post
          (str base-uri "/_site/users")
-         {:headers {"content-type" "application/json"
-                    "accept" "application/json"
-                    "authorization" (authorization cfg)}
+         {:headers {:content-type "application/json"
+                    :accept "application/json"
+                    :authorization (authorization cfg)}
           :body (json/generate-string opts {:pretty true})
           :throw false})]
     (case status
@@ -824,6 +850,46 @@
     (case status
       200 (print body)
       (print status body))))
+
+(defn register-application [{:keys [client-id client-type redirect-uris scope] :as opts}]
+  (let [cfg (config opts)
+        auth-base-uri (get-in cfg ["uri-map" "https://auth.example.org"])
+        data-base-uri (get-in cfg ["uri-map" "https://data.example.org"])
+
+        client-id (or client-id (input/input {:header (format "Input client id")}))
+        client-type (or client-type
+                        (input/choose
+                         ["public" "confidential"]
+                         {:header (format "Input client type")}))
+        redirect-uris (or redirect-uris
+                          (str/split
+                           (input/input {:header "Redirect URIs (space-separated)"})
+                           #"\s+"))
+        scope (or scope (str/split
+                         (input/input {:header "Scope (space-separated)"})
+                         #"\s+"))
+        #_{:keys [status body]}
+        #_(http/post
+           (str data-base-uri "/_site/applications")
+           {:headers {"content-type" "application/json"
+                      :accept "application/json"
+                      "authorization" (authorization cfg)}
+            :body (json/generate-string opts {:pretty true})
+            :throw false})]
+
+    (when-not (#{"public" "confidential"} client-type)
+      (throw (ex-info "Invalid client-type" {})))
+
+    (println
+     (json/generate-string
+      {"client_id" client-id
+       "client_type" client-type
+       "redirect_uris" redirect-uris
+       "scope" scope}))
+
+    #_(case status
+        200 (print body)
+        (print status body))))
 
 (defn bundles-task []
   (doseq [[k _] (bundles (config (parse-opts)))]
@@ -922,20 +988,23 @@
       (retrieve-token cfg)
       :bundles
       [
+       ;; Assuming https://auth.example.org/session-scopes/form-login-session...
+       ["juxt/site/login-form" {}]
        ;; This is public and you may not want to expose this
        ["juxt/site/system-api-openapi" {}]
        ["juxt/site/oauth-authorization-endpoint"
         { ;;"session-scope" "https://auth.example.org/session-scopes/form-login-session"
          }]
-       ;; Assuming https://auth.example.org/session-scopes/form-login-session...
-       ["juxt/site/login-form" {}]
 
        ;; Register swagger-ui
        ;; TODO: Try not registering this one and see the awful Jetty
        ;; error that results!
        ["juxt/site/system-client" {"client-id" "swagger-ui"}]]))
 
-    (println "Now browse to https://petstore.swagger.io/?url=http://localhost:4444/_site/openapi.json")))
+    (println
+     (format
+      "Now browse to https://petstore.swagger.io/?url=%s/_site/openapi.json"
+      data-base-uri))))
 
 (defn install-petstore [opts]
   (let [cfg (config opts)
@@ -947,7 +1016,8 @@
             :access-token (retrieve-token cfg)
             :bundles
             [["juxt/site/openapis-api" {}]
-             ["demo/petstore/operations" {}]]))
+             ["demo/petstore/operations" {}]
+             ["juxt/site/system-client" {"client-id" "petstore"}]]))
 
     (install-openapi (assoc opts :openapi (str (System/getenv "SITE_HOME") "/demo/petstore/openapi.json")))
 
@@ -960,4 +1030,7 @@
        (merge {:username "alice"
                :role "PetstoreOwner"} opts)))
 
-    (println "Now browse to https://petstore.swagger.io/?url=http://localhost:4444/petstore/openapi.json#/pet/addPet")))
+    (println
+     (format
+      "Now browse to https://petstore.swagger.io/?url=%s/petstore/openapi.json"
+      data-base-uri))))

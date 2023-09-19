@@ -75,6 +75,10 @@ function getTimestampInSeconds() {
 async function handleTokenResponse(response, configItem) {
 
   const { access_token, refresh_token, expires_in } = await response.json();
+
+  // The 'aud' of the JWT is the audience. For an OAuth2 access token,
+  // this will be the resource server. A JWT should ONLY be sent to
+  // servers that are included in the audience of the JWT.
   const { aud } = parseJwt(access_token);
 
   tokenStore.set(aud, access_token);
@@ -93,14 +97,9 @@ async function handleTokenResponse(response, configItem) {
 async function attachBearerToken(request, _clientId) {
   const { origin } = new URL(request.url);
 
-  console.log("origin of request is ", origin);
-  console.log("request is ", request);
-
   const referrer_origin = new URL(request.referrer).origin;
 
   const configItem = configStore.get(referrer_origin);
-
-  console.log(configStore);
 
   if (!configItem || configItem.token_endpoint === request.url) {
     return request;
@@ -144,7 +143,7 @@ function isTokenEndpoint(url) {
 // This function intercepts all responses, but only handles the ones from the token endpoint.
 // It stores the access token, refresh token, and expiration date in the corresponding Maps in memory,
 // and returns a new Response to the client without the body to avoid exposing the access token.
-async function storeBearerToken(response) {
+async function handleResponse(response) {
   const url = response.url;
   const configItem = isTokenEndpoint(url);
 
@@ -161,19 +160,18 @@ async function storeBearerToken(response) {
   });
 }
 
-async function fetchWithBearerToken({ request, clientId }) {
-  const newRequest =
-    request instanceof Request ? request : new Request(request);
+async function handleFetchEvent({ request, clientId }) {
+  const newRequest = request instanceof Request ? request : new Request(request);
   const attachBearerTokenFn = await attachBearerToken(newRequest, clientId);
-  return fetch(attachBearerTokenFn).then(storeBearerToken);
+  return fetch(attachBearerTokenFn).then(handleResponse);
 }
 
 addEventListener("fetch", (event) => {
   try {
-    event.respondWith(fetchWithBearerToken(event));
+    event.respondWith(handleFetchEvent(event));
     console.log(tokenStore);
   } catch (error) {
-    console.log(error);
+    console.log("Failed in service-working intercepting fetch", error);
   }
 });
 

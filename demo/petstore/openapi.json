@@ -44,7 +44,50 @@
       "description": "Operations about user"
     }
   ],
-  "paths": {
+    "paths": {
+        "/pets": {
+            "get": {
+                "tags": [
+                    "pet"
+                ],
+                "summary": "Finds All Pets in DB",
+                "description": "Finds All Pets in DB",
+                "operationId": "https://auth.example.org/operations/petstore/all-pets",
+                "responses": {
+                    "200": {
+                        "description": "successful operation",
+                        "content": {
+                            "application/xml": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/Pet"
+                                    }
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/Pet"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid status value"
+                    }
+                },
+                "security": [
+                    {
+                        "petstore_auth": [
+                            "read:pets"
+                        ]
+                    }
+                ]
+            }
+        },
     "/pet": {
       "put": {
         "tags": [
@@ -174,7 +217,7 @@
         ],
         "summary": "Finds Pets by status",
         "description": "Multiple status values can be provided with comma separated strings",
-        "operationId": "findPetsByStatus",
+        "operationId": "https://auth.example.org/operations/petstore/find-by-status",
         "parameters": [
           {
             "name": "status",
@@ -236,7 +279,7 @@
         ],
         "summary": "Finds Pets by tags",
         "description": "Multiple tags can be provided with comma separated strings. Use tag1, tag2, tag3 for testing.",
-        "operationId": "findPetsByTags",
+        "operationId": "https://auth.example.org/operations/petstore/find-by-tags",
         "parameters": [
           {
             "name": "tags",
@@ -349,7 +392,7 @@
         ],
         "summary": "Updates a pet in the store with form data",
         "description": "",
-        "operationId": "updatePetWithForm",
+        "operationId": "https://auth.example.org/operations/petstore/update-pet-by-id",
         "parameters": [
           {
             "name": "petId",
@@ -398,7 +441,7 @@
         ],
         "summary": "Deletes a pet",
         "description": "",
-        "operationId": "deletePet",
+        "operationId": "https://auth.example.org/operations/petstore/delete-pet-by-id",
         "parameters": [
           {
             "name": "api_key",
@@ -503,7 +546,7 @@
         ],
         "summary": "Returns pet inventories by status",
         "description": "Returns a map of status codes to quantities",
-        "operationId": "getInventory",
+        "operationId": "https://auth.example.org/operations/petstore/order/inventory",
         "responses": {
           "200": {
             "description": "successful operation",
@@ -534,7 +577,7 @@
         ],
         "summary": "Place an order for a pet",
         "description": "Place a new order in the store",
-        "operationId": "placeOrder",
+        "operationId": "https://auth.example.org/operations/petstore/order/place",
         "requestBody": {
           "content": {
             "application/json": {
@@ -578,7 +621,7 @@
         ],
         "summary": "Find purchase order by ID",
         "description": "For valid response try integer IDs with value <= 5 or > 10. Other values will generate exceptions.",
-        "operationId": "getOrderById",
+        "operationId": "https://auth.example.org/operations/petstore/order/get-by-id",
         "parameters": [
           {
             "name": "orderId",
@@ -621,7 +664,7 @@
         ],
         "summary": "Delete purchase order by ID",
         "description": "For valid response try integer IDs with value < 1000. Anything above 1000 or nonintegers will generate API errors",
-        "operationId": "deleteOrder",
+        "operationId": "https://auth.example.org/operations/petstore/order/delete-by-id",
         "parameters": [
           {
             "name": "orderId",
@@ -937,9 +980,9 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "integer",
+            "type": "string",
             "format": "int64",
-            "example": 10
+            "example": "f3a2ddbc-1170-4d4d-9621-dd070d0e0cc0"
           },
           "petId": {
             "type": "integer",
@@ -977,9 +1020,9 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "integer",
+            "type": "string",
             "format": "int64",
-            "example": 100000
+            "example": "d60587d0-e96c-4d2c-8351-76c0f18c3c58"
           },
           "username": {
             "type": "string",
@@ -1028,9 +1071,9 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "integer",
+            "type": "string",
             "format": "int64",
-            "example": 1
+            "example": "f3a2ddbc-1170-4d4d-9621-dd070d0e0cc0"
           },
           "name": {
             "type": "string",
@@ -1045,9 +1088,9 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "integer",
+            "type": "string",
             "format": "int64",
-            "example": 10
+            "example": "f3a2ddbc-1170-4d4d-9621-dd070d0e0cc0"
           },
           "username": {
             "type": "string",
@@ -1088,7 +1131,7 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "integer",
+            "type": "string",
             "format": "int64"
           },
           "name": {
@@ -1107,9 +1150,9 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "integer",
+            "type": "string",
             "format": "int64",
-            "example": 10
+            "example": "f3a2ddbc-1170-4d4d-9621-dd070d0e0cc0"
           },
           "name": {
             "type": "string",
@@ -1209,8 +1252,8 @@
           "implicit": {
             "authorizationUrl": "https://auth.example.org/oauth/authorize",
             "scopes": {
-              "write:pets": "modify pets in your account",
-              "read:pets": "read your pets"
+              "https://auth.example.org/scopes/petstore/write": "modify pets in your account",
+              "https://auth.example.org/scopes/petstore/read": "read your pets"
             }
           }
         }
